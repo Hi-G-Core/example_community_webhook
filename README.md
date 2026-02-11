@@ -83,11 +83,63 @@ Respuesta requerida:
 { "text": "Tu numero de la suerte de hoy es 27." }
 ```
 
+## 3) Consultar compras por wallet (nuevo endpoint Hi-G)
+
+Endpoint del backend Hi-G:
+
+- `POST /catalog-purchases-by-wallet`
+
+Body:
+
+```json
+{
+  "chatId": "Ai7FfzU2Ljik6yCyUXDH",
+  "wallet": "0x9af7023fcdd4de41614c8b14747cb586d2234aa1",
+  "apiKey": "hig_cat_..."
+}
+```
+
+Tambien puedes enviar la API key por header:
+
+- `x-api-key: hig_cat_...`
+
+Respuesta (resumen):
+
+```json
+{
+  "ok": true,
+  "chatId": "Ai7FfzU2Ljik6yCyUXDH",
+  "wallet": "0x9af7023fcdd4de41614c8b14747cb586d2234aa1",
+  "count": 2,
+  "purchases": []
+}
+```
+
+Caso de uso para tu bot personalizado:
+
+- En `public-examples/server.js`, el endpoint `POST /bot/custom-response` ya incluye ejemplo de esta consulta.
+- Si `count > 0`, responde un texto diferente (usuario ya compró).
+- Si `count == 0`, responde otro texto (usuario aún no compró).
+- Si falla la consulta, usa fallback.
+
+Variables de entorno para ese ejemplo:
+
+- `HIG_API_BASE=https://botv1.api.hi-g.io`
+- `HIG_CATALOG_API_KEY=<api_key_generada_en_el_grupo>`
+
+Limite de respuesta (backend Hi-G):
+
+- Variable: `CUSTOM_BOT_MAX_REPLY_CHARS`
+- Default: `1200`
+- Maximo permitido: `10000` caracteres
+- Si el texto supera el limite configurado, Hi-G lo recorta automaticamente.
+
 ## Ejecutar
 
 ```bash
 cd public-examples
 npm i
+cp .env.example .env
 npm start
 ```
 
