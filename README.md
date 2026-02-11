@@ -1,14 +1,14 @@
-# Public Examples (Hi-G)
+# Ejemplo Publico (Hi-G)
 
-Este directorio contiene un servidor unico de ejemplo con dos endpoints:
+Este proyecto contiene un servidor unico de ejemplo con dos endpoints:
 
 - `POST /webhook/catalog-purchase`
 - `POST /bot/custom-response`
 
 Archivo principal:
 
-- `public-examples/server.js`
-- `public-examples/package.json`
+- `server.js`
+- `package.json`
 
 ## 1) Webhook de catalogo
 
@@ -25,7 +25,7 @@ Payload base que envia Hi-G:
   "timestamp_utc": "2026-02-11T12:00:00.000Z",
   "context": {
     "is_group": true,
-    "chat_id": "Ai7FfzU2Ljik6yCyUXDH",
+    "chat_id": "<chat_id>",
     "chat_title": "Mi comunidad"
   },
   "order": {
@@ -93,8 +93,8 @@ Body:
 
 ```json
 {
-  "chatId": "Ai7FfzU2Ljik6yCyUXDH",
-  "wallet": "0x9af7023fcdd4de41614c8b14747cb586d2234aa1",
+  "chatId": "<chat_id>",
+  "wallet": "<buyer_wallet>",
   "apiKey": "hig_cat_..."
 }
 ```
@@ -108,16 +108,63 @@ Respuesta (resumen):
 ```json
 {
   "ok": true,
-  "chatId": "Ai7FfzU2Ljik6yCyUXDH",
-  "wallet": "0x9af7023fcdd4de41614c8b14747cb586d2234aa1",
+  "chatId": "<chat_id>",
+  "wallet": "<buyer_wallet>",
   "count": 2,
   "purchases": []
 }
 ```
 
+Formato JSON de `purchases`:
+
+```json
+{
+  "ok": true,
+  "chatId": "<chat_id>",
+  "wallet": "<buyer_wallet>",
+  "count": 1,
+  "purchases": [
+    {
+      "orderId": "<order_id>",
+      "firestoreId": "<firestore_doc_id>",
+      "chatId": "<chat_id>",
+      "buyerWallet": "<buyer_wallet>",
+      "sellerWallet": "<seller_wallet_or_empty>",
+      "total": 0,
+      "currency": "<currency_or_USDC>",
+      "status": "<completed|pending|...>",
+      "createdAt": "<ISO_DATETIME>",
+      "updatedAt": "<ISO_DATETIME>",
+      "items": [
+        {
+          "catalogId": "<catalog_id>",
+          "itemId": "<item_id>",
+          "name": "<item_name>",
+          "quantity": 0,
+          "price": 0
+        }
+      ],
+      "checkoutData": {
+        "<catalog_id>:<item_id>": {
+          "<field_name>": "<value>"
+        }
+      }
+    }
+  ]
+}
+```
+
+Notas de los campos:
+
+- `count`: total de compras encontradas para ese `chatId + wallet`.
+- `purchases`: lista de ordenes con solo compras de catalogo.
+- `checkoutData`: datos capturados en checkout por item (si existen).
+- `createdAt` / `updatedAt`: normalmente vienen en formato ISO; solo pueden venir `null` si la orden no tiene ningun timestamp guardado.
+- `currency`: si la orden no tiene moneda guardada, el backend responde `USDC` por defecto.
+
 Caso de uso para tu bot personalizado:
 
-- En `public-examples/server.js`, el endpoint `POST /bot/custom-response` ya incluye ejemplo de esta consulta.
+- En `server.js`, el endpoint `POST /bot/custom-response` ya incluye ejemplo de esta consulta.
 - Si `count > 0`, responde un texto diferente (usuario ya compró).
 - Si `count == 0`, responde otro texto (usuario aún no compró).
 - Si falla la consulta, usa fallback.
@@ -126,6 +173,21 @@ Variables de entorno para ese ejemplo:
 
 - `HIG_API_BASE=https://botv1.api.hi-g.io`
 - `HIG_CATALOG_API_KEY=<api_key_generada_en_el_grupo>`
+
+## Troubleshooting rapido (si devuelve `count: 0`)
+
+1. Verifica que `chatId` sea el ID exacto de la comunidad/canal donde se compro.
+2. Verifica que `wallet` sea la wallet compradora exacta.
+3. Verifica que la API key pertenezca a ese mismo `chatId` (si no, devolvera `invalid_api_key` o `0` segun tu flujo).
+4. Si agregaste o cambiaste el endpoint recientemente, reinicia el proceso Node/PM2 para cargar cambios.
+5. Si antes veias `Cannot POST /catalog-purchases-by-wallet`, revisa que el proxy (Nginx/Hestia) apunte al puerto del backend correcto.
+
+Codigos de error comunes:
+
+- `400 missing_params`: faltan `chatId`, `wallet` o API key.
+- `403 api_key_not_configured`: el grupo aun no tiene API key configurada.
+- `403 invalid_api_key`: API key incorrecta para ese grupo.
+- `404 group_not_found`: `chatId` no existe.
 
 Limite de respuesta (backend Hi-G):
 
@@ -137,10 +199,11 @@ Limite de respuesta (backend Hi-G):
 ## Ejecutar
 
 ```bash
-cd public-examples
 npm i
 cp .env.example .env
 npm start
 ```
 
-Por defecto corre en `http://localhost:8080`.
+Este ejemplo carga variables de entorno desde `.env` usando `dotenv`.
+
+Por defecto corre en `http://localhost:7010`.

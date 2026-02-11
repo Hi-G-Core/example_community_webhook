@@ -1,13 +1,15 @@
-const express = require('express');
+require("dotenv").config();
+
+const express = require("express");
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: "1mb" }));
 
 const HIG_API_BASE = String(
-  process.env.HIG_API_BASE || 'https://botv1.api.hi-g.io',
+  process.env.HIG_API_BASE ?? "https://botv1.api.hi-g.io",
 ).trim();
 const HIG_CATALOG_API_KEY = String(
-  process.env.HIG_CATALOG_API_KEY || '',
+  process.env.HIG_CATALOG_API_KEY ?? "",
 ).trim();
 
 function pickLuckyNumber() {
@@ -22,10 +24,10 @@ async function getCatalogPurchasesByWallet({ chatId, wallet }) {
   const url = `${HIG_API_BASE}/catalog-purchases-by-wallet`;
   try {
     const res = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': HIG_CATALOG_API_KEY,
+        "Content-Type": "application/json",
+        "x-api-key": HIG_CATALOG_API_KEY,
       },
       body: JSON.stringify({
         chatId,
@@ -37,51 +39,53 @@ async function getCatalogPurchasesByWallet({ chatId, wallet }) {
     const json = await res.json().catch(() => null);
     if (!res.ok || !json?.ok) return null;
     return json;
-  } catch (_) {
+  } catch (e) {
+    console.log("Error", e);
     return null;
   }
 }
 
-app.get('/health', (_, res) => {
-  res.status(200).json({ ok: true, service: 'public-examples' });
+app.get("/health", (_, res) => {
+  res.status(200).json({ ok: true, service: "public-examples" });
 });
 
 // 1) Catalog purchase webhook endpoint
-app.post('/webhook/catalog-purchase', (req, res) => {
-  const body = req.body || {};
+app.post("/webhook/catalog-purchase", (req, res) => {
+  const body = req.body ?? {};
   const ts = new Date().toISOString();
+  const total = body?.order?.total ?? 0;
+  const currency = body?.order?.currency ?? "USDC";
+  const quantity = body?.item?.quantity ?? 0;
+  const checkoutFields = body?.checkout_fields ?? {};
 
   console.log(`\n[${ts}] --- catalog webhook received ---`);
-  console.log('event:', body.event);
-  console.log('order_id:', body?.order?.order_id);
-  console.log('total:', body?.order?.total, body?.order?.currency || 'USDC');
-  console.log('buyer:', body?.buyer?.wallet);
-  console.log('item:', body?.item?.name, `(x${body?.item?.quantity || 0})`);
-  console.log('checkout_fields:', body?.checkout_fields || {});
+  console.log("event:", body.event);
+  console.log("order_id:", body?.order?.order_id);
+  console.log("total:", total, currency);
+  console.log("buyer:", body?.buyer?.wallet);
+  console.log("item:", body?.item?.name, `(x${quantity})`);
+  console.log("checkout_fields:", checkoutFields);
 
   return res.status(200).json({ ok: true });
 });
 
 // 2) Custom bot URL endpoint (Lucky Number, no AI)
 // Also includes an example that checks if user already bought in this chat.
-app.post('/bot/custom-response', async (req, res) => {
-  const body = req.body || {};
+app.post("/bot/custom-response", async (req, res) => {
+  const body = req.body ?? {};
   console.dir(body, { depth: null });
-  const type = String(body.type || 'text');
+  const type = String(body.type ?? "text");
   const lucky = pickLuckyNumber();
   const ts = new Date().toISOString();
-  const orderId =
-    body?.input?.order?.order_id ||
-    body?.input?.payload?.order?.order_id ||
-    null;
+  const orderId = body?.input?.order?.order_id ?? null;
 
   console.log(`\n[${ts}] --- custom bot url request ---`);
-  console.log('type:', type);
-  console.log('schema_version:', body.schema_version);
-  console.log('order_id:', orderId);
+  console.log("type:", type);
+  console.log("schema_version:", body.schema_version);
+  console.log("order_id:", orderId);
 
-  if (type === 'catalog') {
-    const productName = body?.input?.payload?.item?.name || 'tu compra';
+  if (type === "catalog") {
+    const productName = body?.input?.payload?.item?.name ?? "tu compra";
     return res.status(200).json({
       text: `Gracias por tu compra de ${productName}. Tu numero de la suerte de hoy es ${lucky}.`,
     });
@@ -91,19 +95,26 @@ app.post('/bot/custom-response', async (req, res) => {
   // Requires:
   // - HIG_API_BASE
   // - HIG_CATALOG_API_KEY
-  const chatId = String(body?.input?.chat?.chat_id || '').trim();
-  const wallet = String(body?.input?.sender?.wallet || '').trim();
+  const chatId = String(body?.input?.chat?.chat_id ?? "").trim();
+  const wallet = String(body?.input?.sender?.wallet ?? "").trim();
   const purchasesResult = await getCatalogPurchasesByWallet({ chatId, wallet });
 
-  if (purchasesResult && Number(purchasesResult.count || 0) > 0) {
-    return res.status(200).json({
-      text: `Ya veo ${purchasesResult.count} compra(s) previas en este chat. Te doy soporte avanzado. Numero de la suerte: ${lucky}.`,
-    });
-  }
+  // "9e2d5ceb" is the catalog product ID to check in purchases.
+  // Replace this value with your own product ID from Hi-G.
+  const premiumItemId = "9e2d5ceb";
+  const hasPremiumPurchase = Array.isArray(purchasesResult?.purchases)
+    ? purchasesResult.purchases.some((purchase) =>
+        Array.isArray(purchase?.items)
+          ? purchase.items.some(
+              (item) => String(item?.itemId ?? "").trim() === premiumItemId,
+            )
+          : false,
+      )
+    : false;
 
-  if (purchasesResult && Number(purchasesResult.count || 0) === 0) {
+  if (hasPremiumPurchase) {
     return res.status(200).json({
-      text: `Aun no veo compras de catalogo en este chat para tu wallet. Si compras uno, te habilito el flujo premium. Numero de la suerte: ${lucky}.`,
+      text: "Gracias por comprar nuestro plan premium.",
     });
   }
 
@@ -114,10 +125,10 @@ app.post('/bot/custom-response', async (req, res) => {
   });
 });
 
-const port = Number(process.env.PORT || 7010);
+const port = Number(process.env.PORT ?? 7010);
 app.listen(port, () => {
   console.log(`Public examples server listening on http://localhost:${port}`);
-  console.log('Endpoints:');
-  console.log('- POST /webhook/catalog-purchase');
-  console.log('- POST /bot/custom-response');
+  console.log("Endpoints:");
+  console.log("- POST /webhook/catalog-purchase");
+  console.log("- POST /bot/custom-response");
 });
