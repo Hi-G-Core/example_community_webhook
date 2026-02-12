@@ -16,6 +16,77 @@ function pickLuckyNumber() {
   return Math.floor(Math.random() * 99) + 1; // 1..99
 }
 
+function _isFutureIso(iso) {
+  const raw = String(iso || "").trim();
+  if (!raw) return true;
+  const ms = Date.parse(raw);
+  if (Number.isNaN(ms)) return true;
+  return ms > Date.now();
+}
+
+function _hasActiveSubscriptionForItem(purchase, itemId) {
+  const subs = Array.isArray(purchase?.subscriptions)
+    ? purchase.subscriptions
+    : [];
+
+  const matchingSubs = subs.filter(
+    (sub) => String(sub?.item?.itemId || "").trim() === itemId,
+  );
+
+  if (matchingSubs.length === 0) return false;
+
+  return matchingSubs.some((sub) => {
+    const status = String(sub?.status || "").trim().toLowerCase();
+    if (status !== "running") return false;
+    return _isFutureIso(sub?.nextPaymentAt || purchase?.nextDueAt || null);
+  });
+}
+
+function _hasSubscriptionRecordForItem(purchase, itemId) {
+  const subs = Array.isArray(purchase?.subscriptions)
+    ? purchase.subscriptions
+    : [];
+  return subs.some(
+    (sub) => String(sub?.item?.itemId || "").trim() === itemId,
+  );
+}
+
+function _hasPremiumAccess(purchases, premiumItemId) {
+  if (!Array.isArray(purchases)) return false;
+
+  return purchases.some((purchase) => {
+    const items = Array.isArray(purchase?.items) ? purchase.items : [];
+    const matchingItems = items.filter(
+      (item) => String(item?.itemId || "").trim() === premiumItemId,
+    );
+    if (matchingItems.length === 0) return false;
+
+    const hasRecurringItem = matchingItems.some(
+      (item) => String(item?.recurring || "no").trim().toLowerCase() !== "no",
+    );
+    const hasSubRecordForItem = _hasSubscriptionRecordForItem(
+      purchase,
+      premiumItemId,
+    );
+    const purchaseKind = String(purchase?.purchaseKind || "")
+      .trim()
+      .toLowerCase();
+
+    // If premium item is a subscription, require active subscription.
+    if (hasRecurringItem) {
+      return _hasActiveSubscriptionForItem(purchase, premiumItemId);
+    }
+
+    // If response marks this item as subscription, it must be active.
+    if (hasSubRecordForItem || purchaseKind === "subscription") {
+      return _hasActiveSubscriptionForItem(purchase, premiumItemId);
+    }
+
+    // Otherwise treat it as one-time purchase.
+    return true;
+  });
+}
+
 async function getCatalogPurchasesByWallet({ chatId, wallet }) {
   if (!HIG_CATALOG_API_KEY || !chatId || !wallet) {
     return null;
@@ -99,22 +170,17 @@ app.post("/bot/custom-response", async (req, res) => {
   const wallet = String(body?.input?.sender?.wallet ?? "").trim();
   const purchasesResult = await getCatalogPurchasesByWallet({ chatId, wallet });
 
-  // "9e2d5ceb" is the catalog product ID to check in purchases.
+  // "28643d1d" is the catalog product ID to check in purchases.
   // Replace this value with your own product ID from Hi-G.
-  const premiumItemId = "9e2d5ceb";
-  const hasPremiumPurchase = Array.isArray(purchasesResult?.purchases)
-    ? purchasesResult.purchases.some((purchase) =>
-        Array.isArray(purchase?.items)
-          ? purchase.items.some(
-              (item) => String(item?.itemId ?? "").trim() === premiumItemId,
-            )
-          : false,
-      )
-    : false;
+  const premiumItemId = "28643d1d";
+  const hasPremiumPurchase = _hasPremiumAccess(
+    purchasesResult?.purchases,
+    premiumItemId,
+  );
 
   if (hasPremiumPurchase) {
     return res.status(200).json({
-      text: "Gracias por comprar nuestro plan premium.",
+      text: `Gracias por comprar nuestro plan premium. Tu numero de la suerte de hoy es ${lucky}.`,
     });
   }
 

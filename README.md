@@ -133,15 +133,38 @@ Formato JSON de `purchases`:
       "total": 0,
       "currency": "<currency_or_USDC>",
       "status": "<completed|pending|...>",
+      "purchaseKind": "<one_time|subscription|mixed>",
+      "purchasedAt": "<ISO_DATETIME>",
       "createdAt": "<ISO_DATETIME>",
       "updatedAt": "<ISO_DATETIME>",
+      "nextDueAt": "<ISO_DATETIME_or_null>",
+      "isExpired": false,
+      "hasSubscription": false,
+      "subscriptionCount": 0,
       "items": [
         {
           "catalogId": "<catalog_id>",
           "itemId": "<item_id>",
           "name": "<item_name>",
           "quantity": 0,
-          "price": 0
+          "price": 0,
+          "recurring": "<no|daily|weekly|monthly|yearly|...>"
+        }
+      ],
+      "subscriptions": [
+        {
+          "subscriptionId": "<subscription_id>",
+          "status": "<running|stopped|error>",
+          "recurring": "<daily|weekly|monthly|yearly|...>",
+          "startedAt": "<ISO_DATETIME_or_null>",
+          "nextPaymentAt": "<ISO_DATETIME_or_null>",
+          "item": {
+            "catalogId": "<catalog_id>",
+            "itemId": "<item_id>",
+            "name": "<item_name>",
+            "quantity": 0,
+            "price": 0
+          }
         }
       ],
       "checkoutData": {
@@ -158,6 +181,12 @@ Notas de los campos:
 
 - `count`: total de compras encontradas para ese `chatId + wallet`.
 - `purchases`: lista de ordenes con solo compras de catalogo.
+- `purchaseKind`: tipo de compra (`one_time`, `subscription` o `mixed`).
+- `purchasedAt`: fecha real de compra (usa `order.date` cuando existe).
+- `nextDueAt`: proximo cobro/vencimiento de suscripcion (si aplica).
+- `isExpired`: indica si `nextDueAt` ya paso.
+- `hasSubscription` / `subscriptionCount`: resumen rapido de suscripciones.
+- `subscriptions`: detalle por suscripcion (estado, siguiente cobro e item).
 - `checkoutData`: datos capturados en checkout por item (si existen).
 - `createdAt` / `updatedAt`: normalmente vienen en formato ISO; solo pueden venir `null` si la orden no tiene ningun timestamp guardado.
 - `currency`: si la orden no tiene moneda guardada, el backend responde `USDC` por defecto.
